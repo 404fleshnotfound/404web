@@ -4,36 +4,192 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Work</title>
+    <link rel="stylesheet" href="archivestyle.css">
 </head>
+
 <body>
 
-    hi friends 
+<section id="work-archive">
+  <main id="gallery"></main>
 
-    <script>
-const fetch = require("node-fetch"); // or import fetch from "node-fetch" if using ESM
+  <div id="tumblr-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-modal">×</span>
+      <div id="modal-inner"></div>
+    </div>
+  </div>
+</section>
 
-const NOTION_TOKEN = "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"; // <- put it here
-const DATABASE_ID = "289fa2b0941e80e8b493d63285f3bfb3";       // <- put it here
+<script>
+  const gallery = document.querySelector("#gallery");
+  const modal = document.querySelector("#work-archive .modal");
+  const modalInner = document.querySelector("#work-archive #modal-inner");
+  const closeBtn = document.querySelector("#work-archive .close-modal");
 
-async function fetchNotionDatabase() {
-  const res = await fetch(`https://api.notion.com/v1/databases/${DATABASE_ID}/query`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${NOTION_TOKEN}`,
-      "Notion-Version": "2022-06-28",
-      "Content-Type": "application/json"
+  // Only proceed if required elements exist
+  if (gallery && modal && modalInner) {
+    const feedUrl = "https://404fleshnotfound.tumblr.com/rss";
+    const proxies = [
+      url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+      url => `https://api.allorigins.cf/get?url=${encodeURIComponent(url)}`,
+      url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+    ];
+
+    const statusNode = document.createElement('div');
+    statusNode.className = 'feed-status';
+    statusNode.textContent = 'Loading...';
+    gallery.parentNode.insertBefore(statusNode, gallery);
+
+    async function tryFetchWithProxies(url, tries = proxies.length) {
+      let lastErr = null;
+      const timeoutMs = 10000; // 10s per proxy
+      for (let i = 0; i < proxies.length && i < tries; i++) {
+        const proxyUrl = proxies[i](url);
+        const attemptLine = document.createElement('div');
+        attemptLine.className = 'proxy-attempt';
+        attemptLine.textContent = `Trying proxy: ${proxyUrl}`;
+        statusNode.appendChild(attemptLine);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(proxyUrl, { signal: controller.signal });
+          clearTimeout(timeout);
+          if (!res.ok) throw new Error(`bad status ${res.status}`);
+          // some proxies return JSON with {contents}, others return plain text
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            const json = await res.json();
+            console.info('proxy success (json):', proxyUrl);
+            attemptLine.textContent = `Success via proxy (json): ${proxyUrl}`;
+            statusNode.textContent = `Loaded via proxy: ${proxyUrl}`;
+            return json.contents || json;
+          } else {
+            // try to parse as text
+            const text = await res.text();
+            console.info('proxy success (text):', proxyUrl);
+            attemptLine.textContent = `Success via proxy (text): ${proxyUrl}`;
+            statusNode.textContent = `Loaded via proxy: ${proxyUrl}`;
+            // some proxies (like allorigins) return JSON as text sometimes; try to detect
+            try {
+              const parsed = JSON.parse(text);
+              console.info('parsed JSON from text for proxy:', proxyUrl);
+              return parsed.contents || parsed;
+            } catch (_) {
+              return text;
+            }
+          }
+        } catch (e) {
+          clearTimeout(timeout);
+          lastErr = e;
+          console.warn('proxy failed', proxyUrl, e);
+          attemptLine.textContent = `Failed proxy: ${proxyUrl} — ${e && e.message ? e.message : e}`;
+        }
+      }
+      throw lastErr;
     }
-  });
 
-  const data = await res.json();
-  console.log(data.results); // array of rows
-  return data.results;
-}
+    async function loadFeed() {
+      statusNode.textContent = 'Loading...';
+      try {
+        const contents = await tryFetchWithProxies(feedUrl);
+        // parse XML (if contents is an object from some proxies, ensure string)
+        const xmlString = typeof contents === 'string' ? contents : (contents.contents || '');
+        const xml = new DOMParser().parseFromString(xmlString, 'text/xml');
+        const items = xml.querySelectorAll('item');
 
-// test it
-fetchNotionDatabase();
+        // clear gallery before populating
+        gallery.innerHTML = '';
 
-    </script>
+        if (!items || items.length === 0) {
+          statusNode.textContent = 'No posts found';
+          return;
+        }
+
+        Array.from(items).slice(0, 20).forEach(item => {
+          const desc = item.querySelector('description')?.textContent || '';
+          const title = item.querySelector('title')?.textContent || '';
+          const descDoc = new DOMParser().parseFromString(desc, 'text/html');
+
+          // try several attribute names for the image (src, data-src, data-original)
+          let imgElem = descDoc.querySelector('img');
+          if (!imgElem) imgElem = descDoc.querySelector('[data-src]') || descDoc.querySelector('[data-original]');
+          const imgSrc = imgElem ? (imgElem.src || imgElem.getAttribute('data-src') || imgElem.getAttribute('data-original')) : null;
+          if (!imgSrc) return; // skip posts without images
+
+          // remove images from the description so we don't duplicate
+          descDoc.querySelectorAll('img').forEach(n => n.remove());
+
+          // remove duplicate leading headings equal to the title
+          const firstHeading = descDoc.querySelector('h1, h2, h3');
+          if (firstHeading && firstHeading.textContent.trim() === title.trim()) {
+            firstHeading.remove();
+          } else {
+            const firstChild = descDoc.body && descDoc.body.firstElementChild;
+            if (firstChild && firstChild.textContent && firstChild.textContent.trim() === title.trim()) {
+              firstChild.remove();
+            }
+          }
+
+          const descHtml = descDoc.body ? descDoc.body.innerHTML.trim() : '';
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'thumb-wrap';
+
+          const img = document.createElement('img');
+          img.src = imgSrc;
+          img.loading = 'lazy';
+          img.alt = title;
+          img.className = 'thumb';
+          img.onclick = () => openModal(title, imgSrc, descHtml);
+
+          const caption = document.createElement('p');
+          caption.textContent = title;
+          caption.className = 'caption';
+
+          wrapper.appendChild(img);
+          wrapper.appendChild(caption);
+          gallery.appendChild(wrapper);
+        });
+
+        statusNode.textContent = '';
+      } catch (err) {
+        console.error('Tumblr load failed:', err);
+        statusNode.textContent = 'Error loading feed';
+      }
+    }
+
+    // initial load
+    loadFeed();
+
+    // auto-refresh every 5 minutes (300000 ms)
+    const refreshInterval = 300000;
+    const refreshTimer = setInterval(loadFeed, refreshInterval);
+
+    // expose a method to manually refresh if you want
+    window.refreshTumblrFeed = loadFeed;
+
+    // cleanup when the page unloads
+    window.addEventListener('beforeunload', () => clearInterval(refreshTimer));
+  }
+
+    function openModal(title, imgSrc, descHtml) {
+      modal.classList.add("open");
+      modalInner.innerHTML = `
+        <img src="${imgSrc}" alt="${title}" />
+        <h2 class="modal-title">${title}</h2>
+        <div class="post-desc">${descHtml || ""}</div>
+      `;
+    }
+
+    if (closeBtn) closeBtn.onclick = () => modal.classList.remove("open");
+
+    // tap-out to close
+    modal.addEventListener("click", e => {
+      if (e.target === modal) modal.classList.remove("open");
+    });
+</script>
 
 </body>
+
+
 </html>

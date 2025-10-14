@@ -7,6 +7,59 @@
     <link rel="stylesheet" href="styles.css">
     <link href="dist/hamburgers.css" rel="stylesheet">
 </head>
+
+<script>
+async function loadTumblrImages() {
+  const tumblrRSS = "https://404fleshnotfound.tumblr.com/rss"; // change this
+  const apiURL = `https://api.rss2json.com/v1/api.json?rss_url=${tumblrRSS}`;
+
+  try {
+    const res = await fetch(apiURL);
+    const data = await res.json();
+
+    const posts = data.items.filter(item =>
+      item.content && item.content.match(/<img[^>]+src="([^">]+)/)
+    );
+
+    // generate HTML for all photo posts
+    const html = posts.map(item => {
+      const imgMatch = item.content.match(/<img[^>]+src="([^">]+)/);
+      const imgSrc = imgMatch ? imgMatch[1] : null;
+
+      // extract title + caption
+      const tmp = document.createElement("div");
+      tmp.innerHTML = item.content;
+      const caption = tmp.textContent.trim().replace(/\s+/g, " ").substring(0, 180);
+
+      return imgSrc ? `
+        <article class="post">
+          <a href="${item.link}" target="_blank">
+            <img src="${imgSrc}" loading="lazy" alt="">
+          </a>
+          ${item.title ? `<h2>${item.title}</h2>` : ""}
+          ${caption ? `<p>${caption}</p>` : ""}
+        </article>
+      ` : "";
+    }).join("");
+
+    // populate both sections if they exist
+    const homeGallery = document.getElementById("home-gallery");
+    const workGallery = document.getElementById("work-gallery");
+
+    if (homeGallery) homeGallery.innerHTML = html;
+    if (workGallery) workGallery.innerHTML = html;
+
+  } catch (err) {
+    console.error("Failed to load Tumblr feed:", err);
+  }
+}
+
+loadTumblrImages();
+</script>
+
+
+
+
 <body>
 
 
@@ -62,14 +115,21 @@
   </div>
 </nav>
 
+<div id="TOPSCREENTITLE">
+    <h1>//:404FLESHNOTFOUND</h1>
+</div>
+
+
+<div id="logo">
+    <h1>put a logo</h1>
+</div>
+
 
 
     
     <div id="missionstatement">
-        <ul>
-            <li> <h1>//NEEDLE TO FLESH.</h1> </li>               
-         
-            </ul>
+         <h1>//NEEDLE TO FLESH.</h1>          
+
     </div>
 
 <div id="aboutflesh">
@@ -81,24 +141,35 @@
     </div>
 
         
- <div id="missionstatement">
-        <ul>        
-             <li> <h1>//BRANDED WITH LOVE. </h1> </li>
-         
-            </ul>
+ <div id="missionstatement">     
+        <h1>//BRANDED WITH LOVE. </h1>
+</div>
+
+
+<section id="home-gallery"></section>
+
+
+
+<div>
+    <ul>
+        <li><h1> PUT pHOTO HERE</h1></li>
+    </ul>
+
 </div>
 
     <div id="contact">
         <button class="BOOKBUTTON" onclick="location.href='https://deformity.ai/d/OdnsBqZhF1Yc'"> BOOK here </button>
     </div>
 
+
+
 <footer>
     <socials>
         <button onclick="location.href='https://www.instagram.com/flesh.protocol/'"> instagram </button>
     </socials>
     
-    <p>  designed & coded by me  </p>
-    <p> contact: info@fleshprotocol.com</p>
+    <p>  designed & coded by ...  </p>
+    <p> dontcontact: 404fleshnotfound@gmail.com</p>
 </footer>
 </body>
 </html>

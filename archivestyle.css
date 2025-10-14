@@ -1,0 +1,120 @@
+#work-archive {
+  background: #fff;
+  color: #000;
+  font-family: monospace;
+  padding: 12px;
+}
+
+#work-archive #gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+#work-archive .thumb-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#work-archive .thumb {
+  width: 100%;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+#work-archive .thumb:hover {
+  opacity: 0.85;
+}
+
+#work-archive .caption {
+  font-size: 0.7rem;
+  margin-top: 4px;
+  text-align: center;
+  word-wrap: break-word;
+}
+
+/* modal overlay */
+#work-archive .modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 10px;
+  /* allow the overlay to scroll if modal content exceeds viewport,
+     but keep the modal-content itself free of its own scrollbar */
+  overflow: auto;
+}
+
+#work-archive .modal.open {
+  display: flex;
+}
+
+/* modal content */
+#work-archive .modal-content {
+  background: #fff;
+  padding: 0.8rem;
+  border: 2px solid #000;
+  max-width: 100%;
+  max-height: 100%;
+  /* prevent inner scrollbar inside modal content */
+  overflow: visible;
+  transition: transform 0.15s ease;
+  transform: scale(1);
+  position: relative; /* so absolute children (close button) position correctly */
+}
+
+#work-archive .modal.open .modal-content {
+  transform: scale(1.02);
+}
+
+/* modal image */
+#work-archive .modal-content img {
+  max-width: 100%;
+  max-height: 80vh;
+  display: block;
+  margin: 0 auto 8px;
+}
+
+/* close button */
+#work-archive .close-modal {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+/* small screens */
+@media (max-width: 400px) {
+  #work-archive #gallery {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+  }
+
+  #work-archive .caption {
+    font-size: 0.65rem;
+  }
+}
+
+/* desktop modal scaling */
+@media (min-width: 768px) {
+  #work-archive .modal-content {
+    max-width: 70%;
+    max-height: 80vh;
+    padding: 1.5rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  #work-archive .modal-content {
+    max-width: 50%;
+    max-height: 80vh;
+    padding: 2rem;
+  }
+}
+
