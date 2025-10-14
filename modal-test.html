@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Modal Test</title>
+  <link rel="stylesheet" href="archivestyle.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+    .test-thumb { width:240px; cursor:pointer; border:1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <img class="test-thumb" id="testThumb" src="https://placekitten.com/800/600" alt="test image">
+
+  <div class="modal-overlay" id="test-modal" hidden>
+    <div class="modal-panel" role="dialog" aria-modal="true">
+      <button class="modal-close" aria-label="Close">×</button>
+      <div id="test-modal-inner"></div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const thumb = document.getElementById('testThumb');
+  const modal = document.getElementById('test-modal');
+  const panel = modal.querySelector('.modal-panel');
+  const inner = document.getElementById('test-modal-inner');
+  const closeBtn = modal.querySelector('.modal-close');
+
+  function openModal(title, imgSrc, descHtml){
+    document.body.style.overflow = 'hidden';
+    modal.removeAttribute('hidden');
+    modal.classList.add('open');
+    inner.innerHTML = '';
+    const img = document.createElement('img'); img.src = imgSrc; img.alt = title; inner.appendChild(img);
+    const h2 = document.createElement('h2'); h2.textContent = title; h2.className='modal-title'; inner.appendChild(h2);
+    const d = document.createElement('div'); d.className='post-desc'; d.innerHTML = descHtml || ''; inner.appendChild(d);
+  }
+  function closeModal(){ document.body.style.overflow=''; modal.classList.remove('open'); modal.setAttribute('hidden',''); }
+
+  thumb.addEventListener('click', ()=> openModal('Test kitten','https://placekitten.com/1200/900','A test description for Safari checks.'));
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
+  if (panel) panel.addEventListener('click', e => e.stopPropagation());
+  modal.addEventListener('click', e => { if (e.target===modal) closeModal(); });
+  // ensure hidden on init
+  modal.classList.remove('open'); modal.setAttribute('hidden','');
+})();
+</script>
+</body>
+</html>

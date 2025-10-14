@@ -7,6 +7,144 @@
     <link rel="stylesheet" href="styles.css">
     <link href="dist/hamburgers.css" rel="stylesheet">
 </head>
+
+<script>
+async function loadTumblrImages() {
+  const tumblrRSS = "https://404fleshnotfound.tumblr.com/rss"; // change this
+  const apiURL = `https://api.rss2json.com/v1/api.json?rss_url=${tumblrRSS}`;
+
+  try {
+    const res = await fetch(apiURL);
+    const data = await res.json();
+
+    const posts = data.items.filter(item =>
+      item.content && item.content.match(/<img[^>]+src="([^"><]+)/)
+    );
+
+    // generate HTML for all photo posts
+    const html = posts.map(item => {
+      const imgMatch = item.content.match(/<img[^>]+src="([^"><]+)/);
+      const imgSrc = imgMatch ? imgMatch[1] : null;
+
+      // extract title + caption
+      const tmp = document.createElement("div");
+      tmp.innerHTML = item.content;
+      const caption = tmp.textContent.trim().replace(/\s+/g, " ").substring(0, 180);
+
+      return imgSrc ? `
+        <article class="post">
+          <a href="${item.link}" target="_blank">
+            <img src="${imgSrc}" loading="lazy" alt="">
+          </a>
+          ${item.title ? `<h2>${item.title}</h2>` : ""}
+          ${caption ? `<p>${caption}</p>` : ""}
+        </article>
+      ` : "";
+    }).join("");
+
+  // populate only work-gallery (keep index page minimal; rss-corner shows a compact post)
+  const workGallery = document.getElementById("work-gallery");
+  if (workGallery) workGallery.innerHTML = html;
+
+  } catch (err) {
+    console.error("Failed to load Tumblr feed:", err);
+  }
+}
+
+loadTumblrImages();
+</script>
+
+<script>
+// RSS corner widget: fetch RSS (via allorigins proxy) and auto-rotate posts
+(function(){
+  const rssUrl = 'https://404fleshnotfound.tumblr.com/rss';
+  const proxy = url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  const rssCorner = document.getElementById('rss-corner');
+  const rssItemNode = document.getElementById('rss-item-0');
+  const prevBtn = document.getElementById('rss-prev');
+  const nextBtn = document.getElementById('rss-next');
+  const pauseBtn = document.getElementById('rss-pause');
+
+  let posts = [];
+  let idx = 0;
+  let timer = null;
+  let paused = false;
+  const rotateInterval = 5000;
+
+  function renderPost(i){
+    if (!posts[i]) return;
+    const p = posts[i];
+    // compact layout: optional thumbnail + title + single-line excerpt
+    const thumbHtml = p.thumb ? `<img class="rss-thumb" src="${escapeHtml(p.thumb)}" alt="">` : '';
+    const title = escapeHtml(p.title || '');
+    const excerpt = escapeHtml((p.excerpt || '').trim().replace(/\s+/g,' ').slice(0,60));
+    rssItemNode.innerHTML = `${thumbHtml}<div class="rss-text"><span class="rss-title">${title}</span><span class="rss-excerpt">${excerpt}</span></div>`;
+  }
+
+  function next(){ idx = (idx+1) % posts.length; renderPost(idx); }
+  function prev(){ idx = (idx-1 + posts.length) % posts.length; renderPost(idx); }
+
+  function startTimer(){ if (timer) clearInterval(timer); timer = setInterval(()=>{ if (!paused && posts.length) next(); }, rotateInterval); }
+  function stopTimer(){ if (timer) { clearInterval(timer); timer = null; } }
+
+  function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  async function loadCorner(){
+    try{
+      const res = await fetch(proxy(rssUrl));
+      if (!res.ok) throw new Error('fetch failed');
+      const text = await res.text();
+      const xml = new DOMParser().parseFromString(text, 'text/xml');
+      const items = Array.from(xml.querySelectorAll('item')).slice(0,10).map(it => ({
+        title: it.querySelector('title')?.textContent || '',
+        excerpt: (it.querySelector('description')?.textContent || '').replace(/<[^>]+>/g,'').slice(0,120)
+      }));
+      posts = items.length ? items : [{title:'No posts', excerpt:''}];
+      idx = 0; renderPost(idx); startTimer();
+    }catch(e){ console.warn('rss corner load failed', e); rssItemNode.textContent = 'Feed unavailable'; }
+  }
+
+  // controls
+  nextBtn.addEventListener('click', ()=>{ next(); startTimer(); });
+  prevBtn.addEventListener('click', ()=>{ prev(); startTimer(); });
+  pauseBtn.addEventListener('click', ()=>{ paused = !paused; pauseBtn.textContent = paused ? '▶' : '❚❚'; });
+
+  // pause on hover
+  rssCorner.addEventListener('mouseenter', ()=>{ paused = true; });
+  rssCorner.addEventListener('mouseleave', ()=>{ paused = false; });
+
+  // no shifting with menu; widget stays bottom-left
+  function extractFirstImage(html){
+    const m = String(html||'').match(/<img[^>]+src=["']([^"']+)["']/i);
+    return m ? m[1] : null;
+  }
+
+  async function loadCorner(){
+    try{
+      const res = await fetch(proxy(rssUrl));
+      if (!res.ok) throw new Error('fetch failed');
+      const text = await res.text();
+      const xml = new DOMParser().parseFromString(text, 'text/xml');
+      const items = Array.from(xml.querySelectorAll('item')).slice(0,10).map(it => {
+        const title = it.querySelector('title')?.textContent || '';
+        const link = it.querySelector('link')?.textContent || '';
+        const rawDesc = it.querySelector('description')?.textContent || '';
+        const thumb = extractFirstImage(rawDesc);
+        const excerpt = (rawDesc.replace(/<[^>]+>/g,'')||'').trim().replace(/\s+/g,' ').slice(0,60);
+        return { title, link, excerpt, thumb };
+      });
+      posts = items.length ? items : [{title:'No posts', excerpt:''}];
+      idx = 0; renderPost(idx); startTimer();
+    }catch(e){ console.warn('rss corner load failed', e); rssItemNode.textContent = 'Feed unavailable'; }
+  }
+
+  loadCorner();
+})();
+</script>
+
+
+
+
 <body>
 
 
@@ -14,62 +152,44 @@
 
 <nav role="navigation">
   <div id="menuToggle">
-    <!--
-    A fake / hidden checkbox is used as click reciever,
-    so you can use the :checked selector on it.
-    -->
     <input type="checkbox" id="menuCheckbox" />
-    
-    <!--
-    Some spans to act as a hamburger.
-    
-    They are acting like a real hamburger,
-    not that McDonalds stuff.
-    -->
     <span></span>
     <span></span>
     <span></span>
-    
-    <!--
-    Too bad the menu has to be inside of the button
-    but hey, it's pure CSS magic.
-    -->
     <ul id="menu">
-      <!-- 
-      We can use a label here to close upon click (when doing same page navigation), this
-      does require a slight bit of JS.
-      -->
-      <!-- Or just use regular URLs -->
-
-      <li>
-        <a href="flesh.html">Home</a>
-        </li>
-        <li>
-        <a href="https://deformity.ai/d/OdnsBqZhF1Yc">Booking</a>
-        </li>
-        <li>
-        <a href="https://404fleshnotfound.substack.com/?r=6ncm3i&utm_campaign=pub-share-checklist">Work</a>
-        </li>
-        <li>
-        <a href="About.html">About</a>
-        </li>   
-
-        <li>
-        <a href="intro.html">\\flesh.protocol</a>
-        </li>
-
+      <li><a href="index.html">Home</a></li>
+      <li><a href="https://deformity.ai/d/OdnsBqZhF1Yc">Booking</a></li>
+      <li><a href="work.html">ARCHIVE</a></li>
+      <li><a href="About.html">About</a></li>
+      <li><a href="intro.html">\\flesh.protocol</a></li>
     </ul>
   </div>
 </nav>
 
+<div id="TOPSCREENTITLE">
+  <div class="site-logo" role="img" aria-label="Flesh Protocol logo">
+    <!-- Drop an image here or edit to insert an SVG or text -->
+    <!-- Example: <img src="/path/to/logo.png" alt="Flesh Protocol"> -->
+    <span class="logo-fallback">//:404FLESHNOTFOUND</span>
+  </div>
+</div>
 
+<!-- RSS corner widget -->
+<aside id="rss-corner" aria-live="polite">
+  <div class="rss-controls">
+    <button id="rss-prev" aria-label="Previous">‹</button>
+    <button id="rss-pause" aria-label="Pause">❚❚</button>
+    <button id="rss-next" aria-label="Next">›</button>
+  </div>
+  <div class="rss-inner">
+    <div class="rss-item" id="rss-item-0">Loading feed…</div>
+  </div>
+</aside>
 
     
     <div id="missionstatement">
-        <ul>
-            <li> <h1>//NEEDLE TO FLESH.</h1> </li>               
-         
-            </ul>
+         <h1>//NEEDLE TO FLESH.</h1>          
+
     </div>
 
 <div id="aboutflesh">
@@ -81,24 +201,37 @@
     </div>
 
         
- <div id="missionstatement">
-        <ul>        
-             <li> <h1>//BRANDED WITH LOVE. </h1> </li>
-         
-            </ul>
+ <div id="missionstatement">     
+        <h1>//BRANDED WITH LOVE. </h1>
 </div>
+
+
+<section id="home-gallery"></section>
+
 
     <div id="contact">
         <button class="BOOKBUTTON" onclick="location.href='https://deformity.ai/d/OdnsBqZhF1Yc'"> BOOK here </button>
     </div>
 
+
+
 <footer>
+
+    div class="footerleft">
+    <p>  navigation </p>
+ 
+
+    <div class="footermiddle">
+    <p>  designed & coded by ...  </p>
+    <p> dontcontact: 404fleshnotfound@gmail.com</p>
+    </div>
+
+    <div class="footerright">
     <socials>
         <button onclick="location.href='https://www.instagram.com/flesh.protocol/'"> instagram </button>
     </socials>
-    
-    <p>  designed & coded by me  </p>
-    <p> contact: info@fleshprotocol.com</p>
+    </div>
+
 </footer>
 </body>
 </html>

@@ -9,25 +9,49 @@
 
 <body>
 
-<section id="work-archive">
-  <main id="gallery"></main>
+<nav role="navigation">
+  <div id="menuToggle">
+    <input type="checkbox" id="menuCheckbox" />
+    <span></span>
+    <span></span>
+    <span></span>
+    <ul id="menu">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="https://deformity.ai/d/OdnsBqZhF1Yc">Booking</a></li>
+      <li><a href="work.html">ARCHIVE</a></li>
+      <li><a href="About.html">About</a></li>
+      <li><a href="intro.html">\\flesh.protocol</a></li>
+    </ul>
+  </div>
+</nav>
 
-  <div id="tumblr-modal" class="modal">
-    <div class="modal-content">
-      <span class="close-modal">×</span>
+<section id="work-archive">
+  <main id="gallery" class="gallery-grid"></main>
+
+  <div class="modal-overlay" id="tumblr-modal" hidden>
+    <div class="modal-panel" role="dialog" aria-modal="true">
+      <button class="modal-close" aria-label="Close">×</button>
       <div id="modal-inner"></div>
     </div>
   </div>
 </section>
 
 <script>
+  (function() {
   const gallery = document.querySelector("#gallery");
-  const modal = document.querySelector("#work-archive .modal");
-  const modalInner = document.querySelector("#work-archive #modal-inner");
-  const closeBtn = document.querySelector("#work-archive .close-modal");
+  const modal = document.querySelector("#tumblr-modal");
+  const modalPanel = document.querySelector("#tumblr-modal .modal-panel");
+  const modalInner = document.querySelector("#modal-inner");
+  const closeBtn = document.querySelector("#tumblr-modal .modal-close");
 
-  // Only proceed if required elements exist
-  if (gallery && modal && modalInner) {
+    // small on-page status area for debugging and messages
+    let statusNode = document.querySelector('.feed-status');
+    if (!statusNode) {
+      statusNode = document.createElement('div');
+      statusNode.className = 'feed-status';
+    }
+
+    // feed + proxy configuration (module scope)
     const feedUrl = "https://404fleshnotfound.tumblr.com/rss";
     const proxies = [
       url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
@@ -35,44 +59,43 @@
       url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
     ];
 
-    const statusNode = document.createElement('div');
-    statusNode.className = 'feed-status';
+    if (!(gallery && modal && modalInner)) {
+      // nothing to do on pages without the gallery/modal
+      return;
+    }
+
+    // Ensure modal is appended to document.body so position:fixed works correctly
+    // (if the modal is nested inside an element with transform, fixed can act like absolute)
+    if (modal && modal.parentNode !== document.body) {
+      document.body.appendChild(modal);
+    }
+
+    // insert statusNode if not already inserted
     statusNode.textContent = 'Loading...';
-    gallery.parentNode.insertBefore(statusNode, gallery);
+    if (!statusNode.parentNode && gallery.parentNode) gallery.parentNode.insertBefore(statusNode, gallery);
 
     async function tryFetchWithProxies(url, tries = proxies.length) {
       let lastErr = null;
       const timeoutMs = 10000; // 10s per proxy
       for (let i = 0; i < proxies.length && i < tries; i++) {
         const proxyUrl = proxies[i](url);
-        const attemptLine = document.createElement('div');
-        attemptLine.className = 'proxy-attempt';
-        attemptLine.textContent = `Trying proxy: ${proxyUrl}`;
-        statusNode.appendChild(attemptLine);
+  // minimal proxy attempt logging (no DOM writes)
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         try {
           const res = await fetch(proxyUrl, { signal: controller.signal });
           clearTimeout(timeout);
           if (!res.ok) throw new Error(`bad status ${res.status}`);
-          // some proxies return JSON with {contents}, others return plain text
           const ct = res.headers.get('content-type') || '';
           if (ct.includes('application/json')) {
             const json = await res.json();
-            console.info('proxy success (json):', proxyUrl);
-            attemptLine.textContent = `Success via proxy (json): ${proxyUrl}`;
-            statusNode.textContent = `Loaded via proxy: ${proxyUrl}`;
+            // success via proxy
             return json.contents || json;
           } else {
-            // try to parse as text
             const text = await res.text();
-            console.info('proxy success (text):', proxyUrl);
-            attemptLine.textContent = `Success via proxy (text): ${proxyUrl}`;
-            statusNode.textContent = `Loaded via proxy: ${proxyUrl}`;
-            // some proxies (like allorigins) return JSON as text sometimes; try to detect
+            // success via proxy
             try {
               const parsed = JSON.parse(text);
-              console.info('parsed JSON from text for proxy:', proxyUrl);
               return parsed.contents || parsed;
             } catch (_) {
               return text;
@@ -82,20 +105,22 @@
           clearTimeout(timeout);
           lastErr = e;
           console.warn('proxy failed', proxyUrl, e);
-          attemptLine.textContent = `Failed proxy: ${proxyUrl} — ${e && e.message ? e.message : e}`;
         }
       }
       throw lastErr;
     }
 
     async function loadFeed() {
-      statusNode.textContent = 'Loading...';
+      if (_isLoadingFeed) return; // prevent concurrent runs
+      _isLoadingFeed = true;
+      if (statusNode && statusNode.parentNode) statusNode.textContent = 'Loading...';
       try {
         const contents = await tryFetchWithProxies(feedUrl);
-        // parse XML (if contents is an object from some proxies, ensure string)
         const xmlString = typeof contents === 'string' ? contents : (contents.contents || '');
         const xml = new DOMParser().parseFromString(xmlString, 'text/xml');
         const items = xml.querySelectorAll('item');
+
+        // debug: skipped writing XML snippet to DOM (kept out of production)
 
         // clear gallery before populating
         gallery.innerHTML = '';
@@ -110,24 +135,21 @@
           const title = item.querySelector('title')?.textContent || '';
           const descDoc = new DOMParser().parseFromString(desc, 'text/html');
 
-          // try several attribute names for the image (src, data-src, data-original)
+          // find image via src or data attributes
           let imgElem = descDoc.querySelector('img');
           if (!imgElem) imgElem = descDoc.querySelector('[data-src]') || descDoc.querySelector('[data-original]');
           const imgSrc = imgElem ? (imgElem.src || imgElem.getAttribute('data-src') || imgElem.getAttribute('data-original')) : null;
-          if (!imgSrc) return; // skip posts without images
+          if (!imgSrc) return;
 
-          // remove images from the description so we don't duplicate
+          // remove images from description
           descDoc.querySelectorAll('img').forEach(n => n.remove());
 
-          // remove duplicate leading headings equal to the title
+          // remove duplicated leading title
           const firstHeading = descDoc.querySelector('h1, h2, h3');
-          if (firstHeading && firstHeading.textContent.trim() === title.trim()) {
-            firstHeading.remove();
-          } else {
+          if (firstHeading && firstHeading.textContent.trim() === title.trim()) firstHeading.remove();
+          else {
             const firstChild = descDoc.body && descDoc.body.firstElementChild;
-            if (firstChild && firstChild.textContent && firstChild.textContent.trim() === title.trim()) {
-              firstChild.remove();
-            }
+            if (firstChild && firstChild.textContent && firstChild.textContent.trim() === title.trim()) firstChild.remove();
           }
 
           const descHtml = descDoc.body ? descDoc.body.innerHTML.trim() : '';
@@ -151,42 +173,69 @@
           gallery.appendChild(wrapper);
         });
 
-        statusNode.textContent = '';
+        // clear status
+        if (statusNode && statusNode.parentNode) statusNode.textContent = '';
+        _isLoadingFeed = false;
       } catch (err) {
         console.error('Tumblr load failed:', err);
-        statusNode.textContent = 'Error loading feed';
+        if (statusNode && statusNode.parentNode) statusNode.textContent = 'Error loading feed';
+        _isLoadingFeed = false;
       }
     }
 
-    // initial load
-    loadFeed();
-
-    // auto-refresh every 5 minutes (300000 ms)
-    const refreshInterval = 300000;
-    const refreshTimer = setInterval(loadFeed, refreshInterval);
-
-    // expose a method to manually refresh if you want
-    window.refreshTumblrFeed = loadFeed;
-
-    // cleanup when the page unloads
-    window.addEventListener('beforeunload', () => clearInterval(refreshTimer));
-  }
+    // load guard to prevent overlapping loads
+    let _isLoadingFeed = false;
 
     function openModal(title, imgSrc, descHtml) {
-      modal.classList.add("open");
-      modalInner.innerHTML = `
-        <img src="${imgSrc}" alt="${title}" />
-        <h2 class="modal-title">${title}</h2>
-        <div class="post-desc">${descHtml || ""}</div>
-      `;
+      console.info('openModal', title, imgSrc);
+      // lock body scroll
+      document.body.style.overflow = 'hidden';
+      modal.removeAttribute('hidden');
+      modal.classList.add('open');
+      // render content inside modal-panel
+      modalInner.innerHTML = '';
+      const image = document.createElement('img');
+      image.src = imgSrc;
+      image.alt = title;
+      modalInner.appendChild(image);
+      const h2 = document.createElement('h2');
+      h2.className = 'modal-title';
+      h2.textContent = title;
+      modalInner.appendChild(h2);
+      const descDiv = document.createElement('div');
+      descDiv.className = 'post-desc';
+      descDiv.innerHTML = descHtml || '';
+      modalInner.appendChild(descDiv);
     }
 
-    if (closeBtn) closeBtn.onclick = () => modal.classList.remove("open");
+    function closeModal() {
+      console.info('closeModal');
+      document.body.style.overflow = '';
+      modal.classList.remove('open');
+      modal.setAttribute('hidden', '');
+    }
 
-    // tap-out to close
-    modal.addEventListener("click", e => {
-      if (e.target === modal) modal.classList.remove("open");
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+    // prevent clicks inside modal-panel from bubbling up to overlay
+    if (modalPanel) modalPanel.addEventListener('click', e => e.stopPropagation());
+
+    // tap-out to close: clicking on the overlay closes
+    modal.addEventListener('click', e => {
+      if (e.target === modal) closeModal();
     });
+
+  // ensure modal is not open on init
+  modal.classList.remove('open');
+  modal.setAttribute('hidden', '');
+
+    // initial load + refresh
+    loadFeed();
+    const refreshInterval = 300000; // 5 min
+    const refreshTimer = setInterval(loadFeed, refreshInterval);
+    window.refreshTumblrFeed = loadFeed;
+    window.addEventListener('beforeunload', () => clearInterval(refreshTimer));
+  })();
 </script>
 
 </body>
